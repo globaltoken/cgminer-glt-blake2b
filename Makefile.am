@@ -173,6 +173,10 @@ if HAS_BITMAIN_A3
 cgminer_SOURCES += driver-btm-sia.c driver-btm-sia.h 
 endif
 
+if HAS_BITMAIN_A3_GLT_EDITION
+cgminer_SOURCES += driver-btm-glt.c driver-btm-glt.h 
+endif
+
 if HAS_MODMINER
 cgminer_SOURCES += driver-modminer.c
 bitstreamsdir = $(bindir)/bitstreams

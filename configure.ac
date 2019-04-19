@@ -184,11 +184,24 @@ AC_ARG_ENABLE([bitmain_A3],
 	[bitmain_A3=$enableval]
 	)
 if test "x$bitmain_A3" = xyes; then
-	AC_DEFINE([USE_BITMAIN_A3], [1], [Defined to 1 if Bitmain L3 support is wanted])
+	AC_DEFINE([USE_BITMAIN_A3], [1], [Defined to 1 if Bitmain A3 support is wanted])
 	drivercount=x$drivercount
 	standalone="yes"
 fi
 AM_CONDITIONAL([HAS_BITMAIN_A3], [test x$bitmain_A3 = xyes])
+
+bitmain_A3_GLT="no"
+
+AC_ARG_ENABLE([bitmain_A3_GLT],
+	[AC_HELP_STRING([--enable-bitmain-A3-GLT],[Compile support for Bitmain A3 to mine GLT(default disabled)])],
+	[bitmain_A3_GLT=$enableval]
+	)
+if test "x$bitmain_A3_GLT" = xyes; then
+	AC_DEFINE([USE_BITMAIN_A3_GLT_EDITION], [1], [Defined to 1 if Bitmain A3 GLT edition support is wanted])
+	drivercount=x$drivercount
+	standalone="yes"
+fi
+AM_CONDITIONAL([HAS_BITMAIN_A3_GLT_EDITION], [test x$bitmain_A3_GLT = xyes])
 
 bitmain_D1="no"
 
@@ -527,7 +540,7 @@ else
 	want_libbitfury=false
 fi
 
-if test x$avalon2$avalon4$hashratio$bitmain_c5$bitmain_L3$bitmain_A3$bitmain_D1 != xnononono; then
+if test x$avalon2$avalon4$hashratio$bitmain_c5$bitmain_L3$bitmain_A3$bitmain_A3_GLT$bitmain_D1 != xnononono; then
 	want_crc16=true
 else
 	want_crc16=false
@@ -740,6 +753,12 @@ else
 	echo "  Bitmain.A3...: Disabled"
 fi
 
+if test "x$bitmain_A3_GLT" = xyes; then
+	echo "  Bitmain.A3 (GLT Mode) ...: Enabled"
+else
+	echo "  Bitmain.A3 (GLT Mode) ...: Disabled"
+fi
+
 if test "x$bitmain_D1" = xyes; then
 	echo "  Bitmain.D1...: Enabled"
 else
@@ -869,7 +888,7 @@ else
 fi
 
 #Add any new device to this, along with a no on the end of the test
-if test "x$avalon$avalon2$bab$bflsc$bitforce$bitfury$blockerupter$hashfast$hashratio$icarus$klondike$knc$modminer$drillbit$minion$cointerra$bitmine_A1$bmsc$bitmain$sp10$sp30$bitmain_c5$bitmain_L3$bitmain_A3$bitmain_D1" = xnononononononononononononononononononononono; then
+if test "x$avalon$avalon2$bab$bflsc$bitforce$bitfury$blockerupter$hashfast$hashratio$icarus$klondike$knc$modminer$drillbit$minion$cointerra$bitmine_A1$bmsc$bitmain$sp10$sp30$bitmain_c5$bitmain_L3$bitmain_A3$bitmain_A3_GLT$bitmain_D1" = xnononononononononononononononononononononono; then
 	echo
 	AC_MSG_ERROR([No mining devices configured in])
 	echo

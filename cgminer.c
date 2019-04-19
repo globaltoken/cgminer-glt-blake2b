@@ -404,6 +404,11 @@ extern int opt_bitmain_sia_freq;
 extern int opt_bitmain_sia_voltage;
 extern int8_t opt_bitmain_sia_core_temp;
 #endif
+#ifdef USE_BITMAIN_A3_GLT_EDITION
+extern int opt_bitmain_glt_freq;
+extern int opt_bitmain_glt_voltage;
+extern int8_t opt_bitmain_glt_core_temp;
+#endif
 
 
 extern int last_temperature, temp_highest;
@@ -1745,7 +1750,7 @@ static struct opt_table opt_config_table[] =
                     "Record work test data to file"),
 #endif
 
-#if  (defined USE_BITMAIN_D1) || (defined USE_BITMAIN_A3)
+#if  (defined USE_BITMAIN_D1) || (defined USE_BITMAIN_A3) || (defined USE_BITMAIN_A3_GLT_EDITION)
     OPT_WITHOUT_ARG("--bitmain-fan-ctrl",
                     opt_set_bool, &opt_bitmain_fan_ctrl,
                     "Enable bitmain miner fan controlling"),
@@ -1774,6 +1779,18 @@ static struct opt_table opt_config_table[] =
                  "Select core temp"),
     OPT_WITH_ARG("--bitmain-voltage",
                  set_int_0_to_9999,opt_show_intval, &opt_bitmain_sia_voltage,
+                 "Set voltage"),
+#endif
+
+#ifdef USE_BITMAIN_A3_GLT_EDITION
+    OPT_WITH_ARG("--bitmain-freq",
+                 set_int_0_to_9999,opt_show_intval, &opt_bitmain_glt_freq,
+                 "Set frequency"),
+    OPT_WITH_ARG("--bitmain-core-temp",
+                 set_int_0_to_100,opt_show_intval, &opt_bitmain_glt_core_temp,
+                 "Select core temp"),
+    OPT_WITH_ARG("--bitmain-voltage",
+                 set_int_0_to_9999,opt_show_intval, &opt_bitmain_glt_voltage,
                  "Set voltage"),
 #endif
 
@@ -2380,6 +2397,9 @@ static char *opt_verusage_and_exit(const char *extra)
            "bitmain_A3 "
 #endif
 
+#ifdef USE_BITMAIN_A3_GLT_EDITION
+           "bitmain_A3 (GLT Edition) "
+#endif
 #ifdef USE_AVALON
            "avalon "
 #endif

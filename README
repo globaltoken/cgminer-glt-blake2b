@@ -115,6 +115,7 @@ If building on Ubuntu:
 CGMiner specific configuration options:
   --enable-bmsc           Compile support for BitMain Single Chain(default disabled)
   --enable-bitmain        Compile support for BitMain Multi Chain(default disabled)
+  --enable-bitmain-A3-GLT Compile support for BitMain A3 GLT Miner edition (default disabled)
   --enable-avalon         Compile support for Avalon (default disabled)
   --enable-avalon2        Compile support for Avalon2 (default disabled)
   --enable-avalon4        Compile support for Avalon4 (default disabled)
