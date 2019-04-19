@@ -39,7 +39,7 @@
 #endif
 
 #include "elist.h"
-#include "driver-btm-glt.h"
+#include "driver-btm-GLT.h"
 #include "util.h"
 
 
