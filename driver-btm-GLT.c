@@ -3788,7 +3788,7 @@ void *bitmain_scanhash(void *arg)
             
             if(submitnonceok)
             {
-                h += 0x1UL << (DEVICE_DIFF_SET- DEVICE_DIFF_STANDARD);
+                h++;
                 which_asic_nonce = ((Swap32(nonce) & 0xFC000000) >> 26) / dev.addrInterval;
                 which_core_nonce = (nonce >> 24 ) & 0x7f;
                 applog(LOG_DEBUG,"%s: chain %d which_asic_nonce %d ", __FUNCTION__, chain_id, which_asic_nonce);
