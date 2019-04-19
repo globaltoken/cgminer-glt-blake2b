@@ -5665,15 +5665,12 @@ static bool test_work_current(struct work *work)
     if (work->mandatory)
         return ret;
 
-    if ( USE_BITMAIN_A3 )
-    {
+#ifdef USE_BITMAIN_A3
         flip32 ( bedata, work->data );
-    }
-    else
-    {
+#else
         swap256 ( bedata, work->data + 4 );
         __bin2hex ( hexstr, bedata, 32 );
-    }
+#endif
 
     /* Search to see if this block exists yet and if not, consider it a
      * new block and set the current block details to this one */
@@ -7547,20 +7544,17 @@ static void *stratum_sthread(void *userdata)
             continue;
         }
 
-        if ( USE_BITMAIN_A3 )
+#ifdef USE_BITMAIN_A3
+        nonce = htobe32 ( * ( ( uint32_t* ) ( work->data + 32 ) ) ); 
+        if(pool->has_header)
         {
-        	nonce = htobe32 ( * ( ( uint32_t* ) ( work->data + 32 ) ) ); 
-        	if(pool->has_header)
-        	{
-        		work_nonce = ( uint32_t* ) ( work->data + 32 );
-    			*work_nonce = htole32 ( nonce );
-                header = bin2hex( work->data, 80);
-        	}            
-        }
-        else
-        {
-            nonce = * ( ( uint32_t* ) ( work->data + 76 ) );
-        }
+            work_nonce = ( uint32_t* ) ( work->data + 32 );
+            *work_nonce = htole32 ( nonce );
+            header = bin2hex( work->data, 80);
+        }            
+#else
+        nonce = * ( ( uint32_t* ) ( work->data + 76 ) );
+#endif
 
         applog(LOG_DEBUG, "%s: nonce = 0x%08x", __FUNCTION__, nonce);
         nonce2_64 = (uint64_t *)nonce2;
@@ -7580,10 +7574,9 @@ static void *stratum_sthread(void *userdata)
 
         __bin2hex(noncehex, (const unsigned char *)&nonce, 4);
         __bin2hex(nonce2hex, nonce2, work->nonce2_len);
-        if ( USE_BITMAIN_A3 )
-        {
-            strcat ( noncehex, "00000000" );
-        }
+#ifdef USE_BITMAIN_A3
+        strcat ( noncehex, "00000000" );
+#endif
 
         sshare = calloc(sizeof(struct stratum_share), 1);
         hash32 = (uint32_t *)work->hash;
@@ -8262,177 +8255,174 @@ void get_work_by_nonce2(struct thr_info *thr, struct work **work,struct pool *po
  * other means to detect when the pool has died in stratum_thread */
 static void gen_stratum_work(struct pool *pool, struct work *work)
 {
-    if ( USE_BITMAIN_A3 )
+#ifdef USE_BITMAIN_A3
+    unsigned char merkle_root[32], merkle_sha[65];
+    uint32_t* data32, *swap32;
+    uint64_t nonce2le;
+    int i, j;
+    if(!pool->has_header)
     {
-        unsigned char merkle_root[32], merkle_sha[65];
-        uint32_t* data32, *swap32;
-        uint64_t nonce2le;
-        int i, j;
-        if(!pool->has_header)
-        {
-            cg_wlock ( &pool->data_lock );
-            nonce2le = htole64 ( pool->nonce2 );
-            memcpy ( pool->coinbase + pool->nonce2_offset, &nonce2le, pool->n2size );
-            work->nonce2 = pool->nonce2++;
-            work->nonce2_len = pool->n2size;
-
-            /* Downgrade to a read lock to read off the pool variables */
-            cg_dwlock ( &pool->data_lock );
-
-            /* Generate merkle root */
-
-            unsigned char* cbbuf = alloca ( 1 + pool->swork.cb_len );
-            cbbuf[0] = 0;
-            memcpy ( cbbuf + 1, pool->coinbase, pool->swork.cb_len );
-            sia_gen_hash ( cbbuf, 1 + pool->swork.cb_len, merkle_root );
-            merkle_sha[0] = 1;
-            memcpy ( merkle_sha + 33, merkle_root, 32 );
-            for ( i = 0; i < pool->swork.merkles; i++ )
-            {
-                memcpy ( merkle_sha + 1, pool->swork.merkle_bin[i], 32 );
-                sia_gen_hash ( merkle_sha, 65, merkle_root );
-                memcpy ( merkle_sha + 33, merkle_root, 32 );
-            }
-            memcpy ( merkle_sha, merkle_root, 32 );
-
-            data32 = ( uint32_t* ) merkle_sha;
-            swap32 = ( uint32_t* ) merkle_root;
-            flip32 ( swap32, data32 );
-
-            /* Copy the data template from header_bin */
-            memcpy ( work->data, pool->header_bin, 128 );
-            memcpy ( work->data + pool->merkle_offset, merkle_root, 32 );
-
-
-            /* Store the stratum work diff to check it still matches the pool's
-            * stratum diff when submitting shares */
-            work->sdiff = pool->swork.diff;
-
-            /* Copy parameters required for share submission */
-            work->job_id = strdup ( pool->swork.job_id );
-            work->nonce1 = strdup ( pool->nonce1 );
-            work->ntime = strdup ( pool->swork.ntime );
-            cg_runlock ( &pool->data_lock );
-
-        }
-        else
-        {
-            cg_wlock ( &pool->data_lock );
-            pool->nonce2++;
-            /* Downgrade to a read lock to read off the pool variables */
-            cg_dwlock ( &pool->data_lock );
-            /* Copy the data template from header_bin */
-            memcpy ( work->data, pool->header_bin, 80 );
-            uint32_t* work_nonce = ( uint32_t* ) ( work->data + 36 );
-    		*work_nonce = ( pool->nonce2 & 0xfffffff );
-            work->sdiff = pool->swork.diff;
-            /* Copy parameters required for share submission */
-            work->job_id = strdup ( pool->swork.job_id );
-            cg_runlock ( &pool->data_lock );
-        }
-        set_target ( work->target, pool->sdiff ); //work->sdiff);//把pool的diff设置为work的sdiff,再设置成work的target
-        local_work++;
-        work->pool = pool;
-        work->stratum = true;
-        work->id = total_work++;
-        work->longpoll = false;
-        work->getwork_mode = GETWORK_MODE_STRATUM;
-        work->work_block = work_block;
-        /* Nominally allow a driver to ntime roll 60 seconds */
-        work->drv_rolllimit = 60;
-        calc_diff ( work, work->sdiff );
-        cgtime ( &work->tv_staged );
-
-    }
-    else
-    {
-        unsigned char merkle_root[32], merkle_sha[64];
-        uint32_t *data32, *swap32;
-        uint64_t nonce2le;
-        int i;
-        char strInfo[1024];
-        char *p = NULL;
-
-        cg_wlock(&pool->data_lock);
-
-        /* Update coinbase. Always use an LE encoded nonce2 to fill in values
-         * from left to right and prevent overflow errors with small n2sizes */
-        nonce2le = htole64(pool->nonce2);
-        memcpy(pool->coinbase + pool->nonce2_offset, &nonce2le, pool->n2size);
+        cg_wlock ( &pool->data_lock );
+        nonce2le = htole64 ( pool->nonce2 );
+        memcpy ( pool->coinbase + pool->nonce2_offset, &nonce2le, pool->n2size );
         work->nonce2 = pool->nonce2++;
         work->nonce2_len = pool->n2size;
 
         /* Downgrade to a read lock to read off the pool variables */
-        cg_dwlock(&pool->data_lock);
+        cg_dwlock ( &pool->data_lock );
 
         /* Generate merkle root */
-        gen_hash(pool->coinbase, merkle_root, pool->coinbase_len);
-        memcpy(merkle_sha, merkle_root, 32);
-        for (i = 0; i < pool->merkles; i++)
-        {
-            memcpy(merkle_sha + 32, pool->swork.merkle_bin[i], 32);
-            gen_hash(merkle_sha, merkle_root, 64);
-            memcpy(merkle_sha, merkle_root, 32);
-        }
-        data32 = (uint32_t *)merkle_sha;
-        swap32 = (uint32_t *)merkle_root;
-        flip32(swap32, data32);
 
-        /* Copy the data template from header_bin : this has many info, including all the values as DASH*/
-        memcpy(work->data, pool->header_bin, 128);  // copy 128, because we want to copy the end of work.data padding bytes "80020000"
-        memcpy(work->data + 36, merkle_root, 32);
+        unsigned char* cbbuf = alloca ( 1 + pool->swork.cb_len );
+        cbbuf[0] = 0;
+        memcpy ( cbbuf + 1, pool->coinbase, pool->swork.cb_len );
+        sia_gen_hash ( cbbuf, 1 + pool->swork.cb_len, merkle_root );
+        merkle_sha[0] = 1;
+        memcpy ( merkle_sha + 33, merkle_root, 32 );
+        for ( i = 0; i < pool->swork.merkles; i++ )
+        {
+            memcpy ( merkle_sha + 1, pool->swork.merkle_bin[i], 32 );
+            sia_gen_hash ( merkle_sha, 65, merkle_root );
+            memcpy ( merkle_sha + 33, merkle_root, 32 );
+        }
+        memcpy ( merkle_sha, merkle_root, 32 );
+
+        data32 = ( uint32_t* ) merkle_sha;
+        swap32 = ( uint32_t* ) merkle_root;
+        flip32 ( swap32, data32 );
+
+        /* Copy the data template from header_bin */
+        memcpy ( work->data, pool->header_bin, 128 );
+        memcpy ( work->data + pool->merkle_offset, merkle_root, 32 );
+
 
         /* Store the stratum work diff to check it still matches the pool's
-         * stratum diff when submitting shares */
-        work->sdiff = pool->sdiff;
+        * stratum diff when submitting shares */
+        work->sdiff = pool->swork.diff;
 
         /* Copy parameters required for share submission */
-        work->job_id = strdup(pool->swork.job_id);
-        work->nonce1 = strdup(pool->nonce1);
-        work->ntime = strdup(pool->ntime);
-        cg_runlock(&pool->data_lock);
+        work->job_id = strdup ( pool->swork.job_id );
+        work->nonce1 = strdup ( pool->nonce1 );
+        work->ntime = strdup ( pool->swork.ntime );
+        cg_runlock ( &pool->data_lock );
 
-        if (opt_debug)
-        {
-            char *header, *merkle_hash;
-
-            header = bin2hex(work->data, 112);
-            merkle_hash = bin2hex((const unsigned char *)merkle_root, 32);
-            applog(LOG_DEBUG, "Generated stratum merkle %s", merkle_hash);
-            applog(LOG_DEBUG, "Generated stratum header %s", header);
-            applog(LOG_DEBUG, "Work job_id %s nonce2 %"PRIu64" ntime %s", work->job_id,
-                   work->nonce2, work->ntime);
-            free(header);
-            free(merkle_hash);
-        }
-
-        // calc_midstate(work);     // DASH do not need it
-        set_target(work->target, work->sdiff);
-        /*
-        applog(LOG_DEBUG, "work->sdiff = 0x%x", work->sdiff);
-        p = bin2hex((const unsigned char *)work->target, 32);
-        applog(LOG_NOTICE, "work->target %s", p);
-        */
-
-        local_work++;
-        if((time(NULL) - local_work_lasttime) > 5)
-        {
-            local_work_lasttime = time(NULL);
-            local_work_last = local_work;
-        }
-
-        work->pool = pool;
-        work->stratum = true;
-        work->nonce = 0;
-        work->longpoll = false;
-        work->getwork_mode = GETWORK_MODE_STRATUM;
-        work->work_block = work_block;
-        /* Nominally allow a driver to ntime roll 60 seconds */
-        work->drv_rolllimit = 60;
-        calc_diff(work, work->sdiff);
-
-        cgtime(&work->tv_staged);
     }
+    else
+    {
+        cg_wlock ( &pool->data_lock );
+        pool->nonce2++;
+        /* Downgrade to a read lock to read off the pool variables */
+        cg_dwlock ( &pool->data_lock );
+        /* Copy the data template from header_bin */
+        memcpy ( work->data, pool->header_bin, 80 );
+        uint32_t* work_nonce = ( uint32_t* ) ( work->data + 36 );
+        *work_nonce = ( pool->nonce2 & 0xfffffff );
+        work->sdiff = pool->swork.diff;
+        /* Copy parameters required for share submission */
+        work->job_id = strdup ( pool->swork.job_id );
+        cg_runlock ( &pool->data_lock );
+    }
+    set_target ( work->target, pool->sdiff ); //work->sdiff);//把pool的diff设置为work的sdiff,再设置成work的target
+    local_work++;
+    work->pool = pool;
+    work->stratum = true;
+    work->id = total_work++;
+    work->longpoll = false;
+    work->getwork_mode = GETWORK_MODE_STRATUM;
+    work->work_block = work_block;
+    /* Nominally allow a driver to ntime roll 60 seconds */
+    work->drv_rolllimit = 60;
+    calc_diff ( work, work->sdiff );
+    cgtime ( &work->tv_staged );
+
+#else
+    unsigned char merkle_root[32], merkle_sha[64];
+    uint32_t *data32, *swap32;
+    uint64_t nonce2le;
+    int i;
+    char strInfo[1024];
+    char *p = NULL;
+
+    cg_wlock(&pool->data_lock);
+
+    /* Update coinbase. Always use an LE encoded nonce2 to fill in values
+     * from left to right and prevent overflow errors with small n2sizes */
+    nonce2le = htole64(pool->nonce2);
+    memcpy(pool->coinbase + pool->nonce2_offset, &nonce2le, pool->n2size);
+    work->nonce2 = pool->nonce2++;
+    work->nonce2_len = pool->n2size;
+
+    /* Downgrade to a read lock to read off the pool variables */
+    cg_dwlock(&pool->data_lock);
+
+    /* Generate merkle root */
+    gen_hash(pool->coinbase, merkle_root, pool->coinbase_len);
+    memcpy(merkle_sha, merkle_root, 32);
+    for (i = 0; i < pool->merkles; i++)
+    {
+        memcpy(merkle_sha + 32, pool->swork.merkle_bin[i], 32);
+        gen_hash(merkle_sha, merkle_root, 64);
+        memcpy(merkle_sha, merkle_root, 32);
+    }
+    data32 = (uint32_t *)merkle_sha;
+    swap32 = (uint32_t *)merkle_root;
+    flip32(swap32, data32);
+
+    /* Copy the data template from header_bin : this has many info, including all the values as DASH*/
+    memcpy(work->data, pool->header_bin, 128);  // copy 128, because we want to copy the end of work.data padding bytes "80020000"
+    memcpy(work->data + 36, merkle_root, 32);
+
+    /* Store the stratum work diff to check it still matches the pool's
+     * stratum diff when submitting shares */
+    work->sdiff = pool->sdiff;
+
+    /* Copy parameters required for share submission */
+    work->job_id = strdup(pool->swork.job_id);
+    work->nonce1 = strdup(pool->nonce1);
+    work->ntime = strdup(pool->ntime);
+    cg_runlock(&pool->data_lock);
+
+    if (opt_debug)
+    {
+        char *header, *merkle_hash;
+
+        header = bin2hex(work->data, 112);
+        merkle_hash = bin2hex((const unsigned char *)merkle_root, 32);
+        applog(LOG_DEBUG, "Generated stratum merkle %s", merkle_hash);
+        applog(LOG_DEBUG, "Generated stratum header %s", header);
+        applog(LOG_DEBUG, "Work job_id %s nonce2 %"PRIu64" ntime %s", work->job_id,
+               work->nonce2, work->ntime);
+        free(header);
+        free(merkle_hash);
+    }
+
+    // calc_midstate(work);     // DASH do not need it
+    set_target(work->target, work->sdiff);
+    /*
+    applog(LOG_DEBUG, "work->sdiff = 0x%x", work->sdiff);
+    p = bin2hex((const unsigned char *)work->target, 32);
+    applog(LOG_NOTICE, "work->target %s", p);
+    */
+
+    local_work++;
+    if((time(NULL) - local_work_lasttime) > 5)
+    {
+        local_work_lasttime = time(NULL);
+        local_work_last = local_work;
+    }
+
+    work->pool = pool;
+    work->stratum = true;
+    work->nonce = 0;
+    work->longpoll = false;
+    work->getwork_mode = GETWORK_MODE_STRATUM;
+    work->work_block = work_block;
+    /* Nominally allow a driver to ntime roll 60 seconds */
+    work->drv_rolllimit = 60;
+    calc_diff(work, work->sdiff);
+
+    cgtime(&work->tv_staged);
+#endif
 }
 
 #ifdef HAVE_LIBCURL
@@ -8762,20 +8752,16 @@ void rebuild_nonce(struct work *work, uint32_t nonce)
 {
     uint32_t nonce_pos = 76;
 
-    if ( USE_BITMAIN_A3 )
-    {
-        nonce_pos = 32;
-    }
+#ifdef USE_BITMAIN_A3
+    nonce_pos = 32;
+#endif
     uint32_t* work_nonce = ( uint32_t* ) ( work->data + nonce_pos );
     *work_nonce = htole32 ( nonce );
-    if ( USE_BITMAIN_A3 )
-    {
-        sia_regen_hash ( work );
-    }
-    else
-    {
-        rebuild_hash ( work );
-    }
+#ifdef USE_BITMAIN_A3
+    sia_regen_hash ( work );
+#else
+    rebuild_hash ( work );
+#endif
 
 }
 
@@ -8967,14 +8953,11 @@ bool submit_nonce_direct(struct thr_info *thr, struct work *work, uint32_t nonce
 
     struct work *work_out;
     uint32_t* work_nonce = NULL;
-    if ( USE_BITMAIN_A3 )
-    {
-        work_nonce = ( uint32_t* ) ( work->data + 32 );
-    }
-    else
-    {
-        work_nonce = ( uint32_t* ) ( work->data + 64 + 12 );
-    }
+#ifdef USE_BITMAIN_A3
+    work_nonce = ( uint32_t* ) ( work->data + 32 );
+#else
+    work_nonce = ( uint32_t* ) ( work->data + 64 + 12 );
+#endif
     *work_nonce = htole32 ( nonce );
 
     work_out = copy_work(work);

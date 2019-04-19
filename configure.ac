@@ -187,8 +187,6 @@ if test "x$bitmain_A3" = xyes; then
 	AC_DEFINE([USE_BITMAIN_A3], [1], [Defined to 1 if Bitmain A3 support is wanted])
 	drivercount=x$drivercount
 	standalone="yes"
-else
-    AC_DEFINE([USE_BITMAIN_A3], [0], [Defined to 0 if Bitmain A3 support is not wanted])
 fi
 AM_CONDITIONAL([HAS_BITMAIN_A3], [test x$bitmain_A3 = xyes])
 
