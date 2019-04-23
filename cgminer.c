@@ -747,6 +747,15 @@ void sia_regen_hash ( struct work* work )
     swab256 ( ohash, hash );
 }
 
+void glt_blake2b_regen_hash ( struct work* work )
+{
+    unsigned char hash[32];
+    char * hex_buff = NULL;
+    uint32_t* ohash = ( uint32_t* ) ( work->hash );
+    sia_gen_hash ( work->data, 80, hash );
+    swab256 ( ohash, hash );
+}
+
 
 
 #endif
@@ -8714,7 +8723,7 @@ static void submit_work_async(struct work *work)
 
 void inc_hw_errors(struct thr_info *thr)
 {
-    //forcelog(LOG_INFO, "%s: %s%d: invalid nonce - HW error", __FUNCTION__, thr->cgpu->drv->name, thr->cgpu->device_id);
+    forcelog(LOG_INFO, "%s: %s%d: invalid nonce - HW error", __FUNCTION__, thr->cgpu->drv->name, thr->cgpu->device_id);
 
     mutex_lock(&stats_lock);
     hw_errors++;
@@ -8759,6 +8768,8 @@ void rebuild_nonce(struct work *work, uint32_t nonce)
     *work_nonce = htole32 ( nonce );
 #ifdef USE_BITMAIN_A3
     sia_regen_hash ( work );
+#elif USE_BITMAIN_A3_GLT_EDITION
+    glt_blake2b_regen_hash(work);
 #else
     rebuild_hash ( work );
 #endif

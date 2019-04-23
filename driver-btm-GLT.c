@@ -3759,7 +3759,7 @@ void *bitmain_scanhash(void *arg)
             }
 #endif
 
-            sia_gen_hash(endiandata, 80, hash1);
+            rebuild_nonce (work, Swap32(nonce));
             memcpy(work->hash, hash1, 32);
 
             if(*((uint32_t *)(&work->hash) + 7) <= DEVICE_DIFF_SET_MASK)
