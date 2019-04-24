@@ -3669,31 +3669,11 @@ void *bitmain_scanhash(void *arg)
     struct cgpu_info *bitmain_glt = thr->cgpu;
     struct bitmain_glt_info *info = bitmain_glt->device_data;
     struct timeval current;
-    uint8_t nonce_bin[4],crc_check,which_asic_nonce,which_core_nonce;
-    uint32_t nonce, i,k, *work_nonce=NULL;
+    bool loged = false;
+    uint8_t nonce_bin[4],crc_check,which_asic_nonce;
+    uint32_t nonce;
     int submitfull = 0;
     bool submitnonceok = true;
-    unsigned char work_id = 0, chain_id = 0, nonce_diff = 0, nonce_crc5 = 0;
-    unsigned char pworkdata[128]= {0},  hash1[32]= {0};
-    unsigned int endiandata[32]= {0};
-    unsigned char *ob_hex=NULL;
-#ifdef PATTEN
-    char patten_log[1024] = {0};
-#endif
-
-    unsigned char buf[80] =
-    {
-        0x00,0x00,0x00,0x20,0xD8,0xC4,0x6A,0xAE,
-        0x69,0x2C,0x0D,0xA5,0x5F,0xEA,0xB7,0x74,
-        0x15,0x67,0xD6,0x4E,0x42,0x8E,0xBB,0x90,
-        0x4B,0x68,0x49,0x5D,0xD5,0x05,0x00,0x00,
-        0x00,0x00,0x00,0x00,0x2E,0x29,0x56,0x66,
-        0x91,0x76,0xDD,0xE1,0x8D,0x08,0x9E,0x89,
-        0x8B,0x76,0xF8,0x35,0xB4,0xC1,0xB4,0xF6,
-        0x28,0xDB,0xA4,0x2F,0x35,0x2F,0xA9,0xA8,
-        0xF1,0xAE,0x3E,0xD9,0x70,0x23,0x5A,0x59,
-        0xCD,0x4A,0x53,0x1A,0x00,0x30,0xD9,0x1A
-    };
 
     struct work *work = NULL;
     cgtime(&current);
@@ -3704,119 +3684,77 @@ void *bitmain_scanhash(void *arg)
     while(nonce_fifo.nonce_num)
     {
         nonce_fifo.nonce_num--;
-
-        crc_check = CRC5((uint8_t *)&(nonce_fifo.nonce_buffer[nonce_fifo.p_rd]), ASIC_RETURN_DATA_LENGTH_WITHOUT_HEADER*8-5);
-        nonce = (nonce_fifo.nonce_buffer[nonce_fifo.p_rd].nonce);
-        work_id = nonce_fifo.nonce_buffer[nonce_fifo.p_rd].wc;
-        chain_id = nonce_fifo.nonce_buffer[nonce_fifo.p_rd].chainid;
-        nonce_diff = nonce_fifo.nonce_buffer[nonce_fifo.p_rd].diff;
-        nonce_crc5 = nonce_fifo.nonce_buffer[nonce_fifo.p_rd].crc5 & 0x1f;
-
-        if(crc_check != nonce_crc5)
+        crc_check = CRC5((uint8_t *)&(nonce_fifo.nonce_buffer[nonce_fifo.p_rd]), 7*8-5);
+        if(crc_check != (nonce_fifo.nonce_buffer[nonce_fifo.p_rd].crc5 & 0x1f))
         {
-            //applog(LOG_ERR,"%s: crc5 error,should be 0x%02x,but check as 0x%02x", __FUNCTION__, nonce_crc5, crc_check);
-            applog(LOG_ERR,"%s: get nonce: 0x%08x, diff: 0x%02x, wc: 0x%02x, crc_received: 0x%02x, crc_checked: 0x%02x,chainid: 0x%02x", __FUNCTION__, nonce, nonce_diff, work_id, nonce_fifo.nonce_buffer[nonce_fifo.p_rd].crc5, crc_check, chain_id);
+            applog(LOG_ERR,"crc5 error,should be %02x,but check as %02x",nonce_fifo.nonce_buffer[nonce_fifo.p_rd].crc5 & 0x1f,crc_check);
+            applog(LOG_NOTICE,"get nonce %02x%02x%02x%02x wc %02x diff %02x crc5 %02x chainid %02x",nonce_fifo.nonce_buffer[nonce_fifo.p_rd].nonce[0], \
+                   nonce_fifo.nonce_buffer[nonce_fifo.p_rd].nonce[1],nonce_fifo.nonce_buffer[nonce_fifo.p_rd].nonce[2], \
+                   nonce_fifo.nonce_buffer[nonce_fifo.p_rd].nonce[3],nonce_fifo.nonce_buffer[nonce_fifo.p_rd].diff, \
+                   nonce_fifo.nonce_buffer[nonce_fifo.p_rd].wc, nonce_fifo.nonce_buffer[nonce_fifo.p_rd].crc5,    \
+                   nonce_fifo.nonce_buffer[nonce_fifo.p_rd].chainid);
 
             //if signature enabled,check SIG_INFO register
             goto crc_error;
         }
-        pthread_mutex_lock(&work_queue_mutex);
-        work = copy_work(info->work_queue[work_id]);
-        pthread_mutex_unlock(&work_queue_mutex);
+        memcpy(nonce_bin,nonce_fifo.nonce_buffer[nonce_fifo.p_rd].nonce,4);
+        uint8_t work_id = nonce_fifo.nonce_buffer[nonce_fifo.p_rd].wc;
+        uint8_t chain_id = nonce_fifo.nonce_buffer[nonce_fifo.p_rd].chainid;
+
+
+
+        memcpy((uint8_t *)&nonce,nonce_bin,4);
+        nonce = htobe32(nonce);
+
+        work = info->work_queue[work_id];
         if(work)
         {
-            //applog(LOG_ERR,"%s: work_id = 0x%02x", __FUNCTION__, work_id);
-
             submitfull = 0;
-            //hexdump((uint8_t *)&work->data, 128);
-
-            work_nonce = (uint32_t *)(work->data + 64 + 12);
-            *work_nonce = Swap32(nonce);
-            applog(LOG_DEBUG,"%s: work_nonce = 0x%08x", __FUNCTION__, nonce);
-
-            memcpy(pworkdata, work->data, 80);
-
-            /*
-            for(i=0;i<WORK_DATA_INPUT_LENGTH; i++)
+            if(submit_nonce_1(thr, work, nonce, &submitfull))
             {
-                applog(LOG_NOTICE, "%s: work->data[%d] = 0x%02x", __FUNCTION__, i, work->data[i]);
-            }
-            */
-
-            for (k=0; k < 20; k++)
-            {
-                endiandata[k] = ((uint32_t*)pworkdata)[k];
-                endiandata[k] = Swap32(endiandata[k]);
-                //applog(LOG_DEBUG,"%s: endiandata[%d] = 0x%08x", __FUNCTION__, k, endiandata[k]);
-            }
-
-#if 0
-            for (k=0; k < 20; k++)
-            {
-                my_be32enc(&endiandata[k], ((uint32_t*)buf)[k]);
-                endiandata[k] = Swap32(endiandata[k]);
-                applog(LOG_ERR,"%s: endiandata[%d] = 0x%08x", __FUNCTION__, k, endiandata[k]);
-            }
-#endif
-
-            rebuild_nonce (work, Swap32(nonce));
-            memcpy(work->hash, hash1, 32);
-
-            if(*((uint32_t *)(&work->hash) + 7) <= DEVICE_DIFF_SET_MASK)
-            {
-                update_work_stats(thr, work);
                 submitnonceok = true;
-                if (fulltest(hash1, work->target))
-                {
-                    submit_nonce_direct(thr,work,Swap32(nonce));
-                }
+                submit_nonce_2(work);
             }
             else
             {
-                applog(LOG_DEBUG,"got a hw from Chain%d Asic%d", chain_id, ((Swap32(nonce) & 0xFC000000) >> 26) / dev.addrInterval);
-                inc_hw_errors(thr);
-                submitnonceok = false;
-                if ( chain_id >= BITMAIN_MAX_CHAIN_NUM )
+                if(submitfull)
                 {
-                    applog( LOG_ERR, "%s: Chain_ID [%d] Error!", __FUNCTION__, chain_id);
+                    submitnonceok = true;
                 }
                 else
                 {
+                    submitnonceok = false;
+                    applog(LOG_DEBUG,"got a hw from Chain%d Asic%d", chain_id,(((nonce >> (20)) & 0xff) / dev.addrInterval);
+                    inc_hw_errors(thr);
+                    if ( chain_id > BITMAIN_MAX_CHAIN_NUM ) applog( LOG_ERR, "Chain_ID [%d] Error!", chain_id);
                     dev.chain_hw[chain_id] ++;
                 }
             }
-            
             if(submitnonceok)
             {
-                h++;
-                h_each_chain[chain_id]++;
-                which_asic_nonce = ((Swap32(nonce) & 0xFC000000) >> 26) / dev.addrInterval;
-                which_core_nonce = (nonce >> 24 ) & 0x7f;
+                which_asic_nonce = (((nonce >> (20)) & 0xff) / dev.addrInterval);
                 applog(LOG_DEBUG,"%s: chain %d which_asic_nonce %d ", __FUNCTION__, chain_id, which_asic_nonce);
-                
-#ifdef PATTEN
-                ob_hex = bin2hex(work->data,80);
-                sprintf(patten_log,"echo \"work %s nonce %08x\" >> /config/glt-test-64/glt-asic-%02u/glt-core-%02u.txt\n",ob_hex,nonce,which_asic_nonce+1,which_core_nonce+1);
-                //applog(LOG_NOTICE,"%s",patten_log);
-                system(patten_log);
-#endif
-
                 if (( chain_id > BITMAIN_MAX_CHAIN_NUM ) || (!dev.chain_exist[chain_id]))
                 {
-                    applog(LOG_ERR, "ChainID Cause Error! ChainID:[%d]", chain_id);
+                    if(!loged)
+                    {
+                        applog(LOG_ERR, "ChainID Cause Error! ChainID:[%d]", chain_id);
+                        loged = true;
+                    }
                     goto crc_error;
                 }
-
                 if ( which_asic_nonce >= A3_MINER_ASIC_NUM_EACH_CHAIN )
                 {
                     applog(LOG_ERR, "Which Nonce Cause Err![%d]", which_asic_nonce);
                     goto crc_error;
                 }
-
+                h += 0x1UL << DEVICE_DIFF_SET;
+                h_each_chain[chain_id] += 0x1UL << DEVICE_DIFF_SET;
                 dev.chain_asic_nonce[chain_id][which_asic_nonce]++;
+
             }
             cg_logwork(work, nonce_bin, submitnonceok);
-            free_work(work);
+
         }
         else
         {
@@ -3833,11 +3771,17 @@ void *bitmain_scanhash(void *arg)
         }
     }
 
+
     cg_runlock(&info->update_lock);
     pthread_mutex_unlock(&nonce_mutex);
     cgsleep_ms(1);
 
-    h = h * DEVICE_DIFF_STANDARD_MASK;
+    if(h != 0)
+    {
+        applog(LOG_DEBUG,"%s: hashes %"PRIu64"...", __FUNCTION__,h * 0x0000ffffull);
+    }
+
+    h = h * 0x0000ffffull;
     return 0;
 }
 

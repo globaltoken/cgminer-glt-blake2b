@@ -20,9 +20,6 @@
 // default ticket mask
 
 #define DEVICE_DIFF_SET                 0x20
-#define DEVICE_DIFF_SET_MASK            0x0
-
-#define DEVICE_DIFF_STANDARD_MASK       0xFFFFFFFFull
 // something about fan
 #define BITMAIN_MAX_FAN_NUM             2
 #define PWM_PERIOD_NS                   100000

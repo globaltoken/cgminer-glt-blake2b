@@ -8399,7 +8399,7 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
         merkle_hash = bin2hex((const unsigned char *)merkle_root, 32);
         applog(LOG_DEBUG, "Generated stratum merkle %s", merkle_hash);
         applog(LOG_DEBUG, "Generated stratum header %s", header);
-        applog(LOG_DEBUG, "Work job_id %s nonce2 %"PRIu64" ntime %s", work->job_id,
+        applog(LOG_DEBUG, "Work job_id %s nonce2 %"PRIu64" ntime %"PRIu64"", work->job_id,
                work->nonce2, work->ntime);
         free(header);
         free(merkle_hash);
@@ -8793,7 +8793,11 @@ bool test_nonce(struct work *work, uint32_t nonce)
 
     applog(LOG_DEBUG, "%s opt_scrypt = %d", __FUNCTION__, opt_scrypt);
 
+#ifdef USE_BITMAIN_A3_GLT_EDITION
+    diff1targ = 0x0000ffffUL;
+#else
     diff1targ = opt_scrypt ? 0x0000ffffUL : 0;
+#endif
     applog(LOG_DEBUG, "%s: diff1targ = 0x%08x", __FUNCTION__, diff1targ);
 //    unsigned char* tmp = (unsigned char*)(work->data + 76);
 
